@@ -5,10 +5,19 @@ public class PlayerController : MonoBehaviour
 {
     public Rigidbody rigidBody;
     public float forceApplied = 5f;
+    [SerializeField] private Transform movementCamera;
 
-    void FixedUpdate()
+    private void Awake()
+    {
+        if (movementCamera == null && Camera.main != null)
+            movementCamera = Camera.main.transform;
+    }
+
+    private void FixedUpdate()
     {
         Vector2 userInput = Vector2.zero;
+
+        if (Keyboard.current == null) return;
 
         if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed)
         {
@@ -30,8 +39,17 @@ public class PlayerController : MonoBehaviour
             userInput.x += 1;
         }
 
-        Vector3 force = new Vector3(userInput.x, 0, userInput.y).normalized;
+        Vector3 forward = Vector3.forward;
+        Vector3 right = Vector3.right;
+        if (movementCamera != null)
+        {
+            forward = Vector3.ProjectOnPlane(movementCamera.forward, Vector3.up).normalized;
+            right = Vector3.ProjectOnPlane(movementCamera.right, Vector3.up).normalized;
+        }
 
-        rigidBody.AddForce(force * forceApplied);
+        Vector3 force = (right * userInput.x + forward * userInput.y).normalized;
+
+        if (rigidBody != null)
+            rigidBody.AddForce(force * forceApplied);
     }
 }
