@@ -14,9 +14,11 @@ public class MazeBuilder : MonoBehaviour
 
     [Header("Prefab Settings")]
     [SerializeField] private float cellSize = 2f;
-    [SerializeField] private float wallLength = 5.0005f;
-    [SerializeField] private float wallModelOffset = 9.3877f;
-    [SerializeField, Range(0.25f, 1.5f)] private float wallHeightScale = 0.75f;
+    [SerializeField] private float wallThickness = 1.5f;
+    [SerializeField, Range(0.25f, 1.5f)] private float wallHeightScale = 1.5f;
+    [SerializeField] private float wallBaseOffset = -0.25f;
+    [SerializeField, Min(0.01f)] private float floorThickness = 0.15f;
+    [SerializeField] private float waterDepth = 1.5f;
     [SerializeField] private bool buildOnStart = true;
 
     private sealed class Cell
@@ -28,9 +30,14 @@ public class MazeBuilder : MonoBehaviour
         public bool visited;
     }
 
-    private GameObject wallPrefab;
+    [SerializeField] private GameObject wallPrefab;
+    [SerializeField] private Material wallMaterial;
+    [SerializeField] private Mesh floorMesh;
+    [SerializeField] private Material floorMaterial;
+    [SerializeField] private Material waterMaterial;
     private Cell[,] cells;
     private readonly List<GameObject> generatedWalls = new List<GameObject>();
+    private readonly List<GameObject> generatedFloors = new List<GameObject>();
     private readonly List<Vector2Int> mazeExitCells = new List<Vector2Int>();
 
     // These properties return the grid cells used for the player, key, and door.
@@ -75,11 +82,6 @@ public class MazeBuilder : MonoBehaviour
         }
     }
 
-    private void Awake()
-    {
-        wallPrefab = Resources.Load<GameObject>("Environment/MazeWall");
-    }
-
     private void Start()
     {
         if (buildOnStart) GenerateMaze();
@@ -88,10 +90,9 @@ public class MazeBuilder : MonoBehaviour
     [ContextMenu("Generate Maze")]
     public void GenerateMaze()
     {
-        if (wallPrefab == null) wallPrefab = Resources.Load<GameObject>("Environment/MazeWall");
         if (wallPrefab == null)
         {
-            Debug.LogError("MazeWall prefab not found at Resources/Environment/MazeWall.", this);
+            Debug.LogError("Assign a wall prefab to MazeBuilder in the Inspector.", this);
             return;
         }
 
@@ -248,7 +249,13 @@ public class MazeBuilder : MonoBehaviour
 
     private void DrawMaze()
     {
-        ClearGeneratedWalls();
+        ClearGeneratedObjects();
+        DrawWalls();
+        DrawFloorAndWater();
+    }
+
+    private void DrawWalls()
+    {
         float halfWidth = width * cellSize * 0.5f;
         float halfHeight = height * cellSize * 0.5f;
         for (int y = 0; y < height; y++)
@@ -265,29 +272,142 @@ public class MazeBuilder : MonoBehaviour
         }
     }
 
+    private void DrawFloorAndWater()
+    {
+        float spawnPadSize = cellSize * 1.5f;
+        float exitPlatformSize = cellSize * 4f;
+        float floorY = transform.position.y - floorThickness * 0.5f;
+        if (floorMaterial != null)
+        {
+            for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                float centerX = (x + 0.5f) * cellSize - width * cellSize * 0.5f;
+                float centerZ = height * cellSize * 0.5f - (y + 0.5f) * cellSize;
+                CreateFloorTile(
+                    transform.position + new Vector3(centerX, floorY, centerZ),
+                    new Vector2(cellSize + 0.02f, cellSize + 0.02f),
+                    "Generated Maze Floor");
+            }
+
+            // Put a wider landing pad directly under the player spawn point.
+            float spawnX = (width / 2f + 0.5f) * cellSize - width * cellSize * 0.5f;
+            float southEdge = transform.position.z - height * cellSize * 0.5f;
+            Vector3 entrancePadPosition = new Vector3(
+                transform.position.x + spawnX,
+                floorY,
+                southEdge - spawnPadSize * 0.5f);
+            CreateFloorTile(entrancePadPosition, new Vector2(spawnPadSize, spawnPadSize), "Generated Maze Entrance Platform");
+
+            // Add a landing pad just beyond each maze exit.
+            foreach (Vector2Int exitCell in mazeExitCells)
+            {
+                float centerX = (exitCell.x + 0.5f) * cellSize - width * cellSize * 0.5f;
+                float centerZ = height * cellSize * 0.5f - (exitCell.y + 0.5f) * cellSize;
+                Vector3 outward;
+                if (exitCell.y == 0) outward = Vector3.forward;
+                else if (exitCell.y == height - 1) outward = Vector3.back;
+                else if (exitCell.x == 0) outward = Vector3.left;
+                else outward = Vector3.right;
+
+                Vector3 padPosition = transform.position + new Vector3(centerX, floorY, centerZ);
+                padPosition += outward * (cellSize * 0.5f + exitPlatformSize * 0.5f);
+                CreateFloorTile(padPosition, new Vector2(exitPlatformSize, exitPlatformSize), "Generated Maze Exit Platform");
+            }
+        }
+
+        if (waterMaterial != null)
+        {
+            float mazeWidth = width * cellSize;
+            float mazeDepth = height * cellSize;
+            Vector3 waterPosition = transform.position + Vector3.down * waterDepth;
+            GameObject water = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            water.transform.SetParent(transform, true);
+            water.transform.position = waterPosition;
+            water.name = "Generated Maze Slime Water";
+            // Unity's plane mesh is 10 by 10 units. The material texture comes from the dungeon pack.
+            water.transform.localScale = new Vector3(
+                (mazeWidth + exitPlatformSize * 2f) / 10f,
+                1f,
+                (mazeDepth + exitPlatformSize * 2f) / 10f);
+            water.GetComponent<Renderer>().sharedMaterial = waterMaterial;
+            Collider waterCollider = water.GetComponent<Collider>();
+            if (waterCollider != null) waterCollider.enabled = false;
+            water.AddComponent<WaterTextureScroller>();
+            BoxCollider hazardTrigger = water.AddComponent<BoxCollider>();
+            hazardTrigger.isTrigger = true;
+            hazardTrigger.size = new Vector3(10f, 1f, 10f);
+            water.AddComponent<ToxicWaterHazard>();
+        }
+    }
+
+    private void CreateFloorTile(Vector3 position, Vector2 size, string objectName)
+    {
+        GameObject tile = new GameObject(objectName);
+        tile.name = objectName;
+        tile.transform.SetParent(transform, true);
+        tile.transform.position = position;
+        // The dungeon floor mesh uses the same atlas UV layout as its wall pieces.
+        tile.transform.localScale = new Vector3(size.x * 0.5f, floorThickness * 0.5f, size.y * 0.5f);
+
+        MeshFilter tileMeshFilter = tile.AddComponent<MeshFilter>();
+        tileMeshFilter.sharedMesh = floorMesh;
+        MeshRenderer tileRenderer = tile.AddComponent<MeshRenderer>();
+        if (tileRenderer != null && floorMaterial != null)
+            tileRenderer.sharedMaterial = floorMaterial;
+
+        BoxCollider tileCollider = tile.AddComponent<BoxCollider>();
+        tileCollider.size = Vector3.one * 2f;
+
+        generatedFloors.Add(tile);
+    }
+
     private void PlaceWall(float x, float z, bool vertical)
     {
-        float prefabScale = cellSize / wallLength;
-        float offset = wallModelOffset * prefabScale;
-        Vector3 position = transform.position + new Vector3(x, 0f, z);
-        if (vertical) position.x -= offset;
-        else position.z -= offset;
+        Vector3 segmentPosition = transform.position + new Vector3(x, 0f, z);
+        GameObject wall = Instantiate(wallPrefab, segmentPosition, Quaternion.identity, transform);
+
+        MeshFilter meshFilter = wall.GetComponentInChildren<MeshFilter>();
+        if (meshFilter == null || meshFilter.sharedMesh == null)
+        {
+            Debug.LogError("The assigned wall prefab must contain a mesh.", wall);
+            Destroy(wall);
+            return;
+        }
+
+        if (wallMaterial != null)
+        {
+            foreach (Renderer renderer in wall.GetComponentsInChildren<Renderer>(true))
+                renderer.sharedMaterial = wallMaterial;
+        }
+
+        Bounds meshBounds = meshFilter.sharedMesh.bounds;
+        Vector3 baseSize = Vector3.Scale(meshBounds.size, meshFilter.transform.localScale);
+        Vector3 targetSize = new Vector3(cellSize, wallHeightScale * 2f, wallThickness);
+        Vector3 scale = new Vector3(
+            targetSize.x / Mathf.Max(baseSize.x, 0.001f),
+            targetSize.y / Mathf.Max(baseSize.y, 0.001f),
+            targetSize.z / Mathf.Max(baseSize.z, 0.001f));
+        wall.transform.localScale = scale;
+
         Quaternion rotation = vertical ? Quaternion.Euler(0f, 90f, 0f) : Quaternion.identity;
-        GameObject wall = Instantiate(wallPrefab, position, rotation, transform);
-        wall.transform.localScale = new Vector3(prefabScale, wallHeightScale, prefabScale);
+        Vector3 meshCenter = Vector3.Scale(meshBounds.center, meshFilter.transform.localScale);
+        Vector3 desiredMeshCenter = segmentPosition + Vector3.up * (wallHeightScale + wallBaseOffset);
+        wall.transform.rotation = rotation;
+        wall.transform.position = desiredMeshCenter - rotation * Vector3.Scale(meshCenter, scale);
         wall.name = "Generated Maze Wall";
         generatedWalls.Add(wall);
     }
 
-    private void ClearGeneratedWalls()
+    private void ClearGeneratedObjects()
     {
-        // The list is not saved when Unity reloads the scene, but generated
-        // walls created from the Inspector remain as children of this object.
-        // Find those as well so Play mode does not add a second maze.
+        // Find generated objects saved as children too, so rebuilding does not duplicate them.
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
             Transform child = transform.GetChild(i);
-            if (child.name != "Generated Maze Wall" && child.name != "MazeWall") continue;
+            if (child.name != "Generated Maze Wall" && child.name != "MazeWall" &&
+                child.name != "Generated Maze Floor" && child.name != "Generated Maze Entrance Platform" &&
+                child.name != "Generated Maze Exit Platform" && child.name != "Generated Maze Slime Water") continue;
 
             if (Application.isPlaying) Destroy(child.gameObject);
             else DestroyImmediate(child.gameObject);
@@ -302,5 +422,6 @@ public class MazeBuilder : MonoBehaviour
         }
 
         generatedWalls.Clear();
+        generatedFloors.Clear();
     }
 }

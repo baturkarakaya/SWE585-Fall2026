@@ -57,11 +57,12 @@ namespace StarterAssets
 
 				return (Readme)readmeObject;
 			}
-			else
+			else if (ids.Length > 1)
 			{
-				Debug.Log("Couldn't find a readme");
-				return null;
+				Debug.LogWarning("Found multiple Starter Assets readme files; skipping automatic selection.");
 			}
+
+			return null;
 		}
 
 		protected override void OnHeaderGUI()
