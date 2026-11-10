@@ -10,6 +10,7 @@ public class MazeBuilder : MonoBehaviour
     [SerializeField, Range(0f, 0.5f)] private float extraPathProbability = 0.08f;
     [SerializeField] private int randomSeed = 585;
     [SerializeField, Min(1)] private int exitCount = 2;
+    [SerializeField, Min(0f)] private float playerStartDistanceFromGate = 3f;
 
     [Header("Prefab Settings")]
     [SerializeField] private float cellSize = 2f;
@@ -215,7 +216,7 @@ public class MazeBuilder : MonoBehaviour
         Vector3 desiredColliderCenter = new Vector3(
             transform.position.x + x,
             playerCollider == null ? player.transform.position.y : playerCollider.bounds.center.y,
-            southEdge - colliderDepth - 0.1f);
+            southEdge - colliderDepth - playerStartDistanceFromGate);
         Vector3 startPosition = desiredColliderCenter - colliderCenterOffset;
 
         Rigidbody body = player.GetComponent<Rigidbody>();
