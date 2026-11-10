@@ -35,12 +35,19 @@ public class MazeBuilder : MonoBehaviour
     [SerializeField] private Mesh floorMesh;
     [SerializeField] private Material floorMaterial;
     [SerializeField] private Material waterMaterial;
+    [SerializeField] private Mesh keyMesh;
+    [SerializeField] private Material keyMaterial;
+    [SerializeField] private GameObject blueCastlePrefab;
+    [SerializeField] private Material blueCastleMaterial;
+    [SerializeField] private GameObject redCastlePrefab;
+    [SerializeField] private Material redCastleMaterial;
+    [SerializeField, Range(0.25f, 2f)] private float castleScale = 1f;
     private Cell[,] cells;
     private readonly List<GameObject> generatedWalls = new List<GameObject>();
     private readonly List<GameObject> generatedFloors = new List<GameObject>();
     private readonly List<Vector2Int> mazeExitCells = new List<Vector2Int>();
 
-    // These properties return the grid cells used for the player, key, and door.
+    // These properties return the cells used to place the player, key, and door.
     public Vector2Int PlayerStartCell
     {
         get
@@ -53,6 +60,11 @@ public class MazeBuilder : MonoBehaviour
     {
         get
         {
+            foreach (Vector2Int exitCell in mazeExitCells)
+            {
+                if (exitCell != DoorCell) return exitCell;
+            }
+
             return new Vector2Int(1, 1);
         }
     }
@@ -67,7 +79,8 @@ public class MazeBuilder : MonoBehaviour
                 int greatestDistance = -1;
                 foreach (Vector2Int exitCell in mazeExitCells)
                 {
-                    int distance = Mathf.Abs(exitCell.x - KeyCell.x) + Mathf.Abs(exitCell.y - KeyCell.y);
+                    Vector2Int selectionAnchor = new Vector2Int(1, 1);
+                    int distance = Mathf.Abs(exitCell.x - selectionAnchor.x) + Mathf.Abs(exitCell.y - selectionAnchor.y);
                     if (distance > greatestDistance)
                     {
                         greatestDistance = distance;
@@ -84,7 +97,12 @@ public class MazeBuilder : MonoBehaviour
 
     private void Start()
     {
-        if (buildOnStart) GenerateMaze();
+        if (!buildOnStart) return;
+
+        if (GetComponent<MazeRoundUI>() == null)
+            gameObject.AddComponent<MazeRoundUI>();
+
+        GenerateMaze();
     }
 
     [ContextMenu("Generate Maze")]
@@ -143,6 +161,7 @@ public class MazeBuilder : MonoBehaviour
         PlaceMazeExits();
 
         DrawMaze();
+        PlaceKeyAndDoor();
         PlacePlayerAtStart();
         Debug.Log($"Generated {width}x{height} Aldous-Broder maze ({generatedWalls.Count} wall segments).", this);
     }
@@ -204,6 +223,9 @@ public class MazeBuilder : MonoBehaviour
             Debug.LogWarning("No object with the Player tag was found.", this);
             return;
         }
+
+        if (player.GetComponent<PlayerRigidbodyPusher>() == null)
+            player.AddComponent<PlayerRigidbodyPusher>();
 
         // Place the player just outside the south entrance, with the collider
         // kept clear of the maze edge.
@@ -275,7 +297,7 @@ public class MazeBuilder : MonoBehaviour
     private void DrawFloorAndWater()
     {
         float spawnPadSize = cellSize * 1.5f;
-        float exitPlatformSize = cellSize * 4f;
+        float exitPlatformSize = cellSize * 6f;
         float floorY = transform.position.y - floorThickness * 0.5f;
         if (floorMaterial != null)
         {
@@ -362,6 +384,156 @@ public class MazeBuilder : MonoBehaviour
         generatedFloors.Add(tile);
     }
 
+    private void PlaceKeyAndDoor()
+    {
+        if (keyMesh != null && keyMaterial != null)
+            CreateKeyToken();
+        else
+            Debug.LogWarning("Assign the CoinD mesh and key material to MazeBuilder.", this);
+
+        if (blueCastlePrefab != null && blueCastleMaterial != null &&
+            redCastlePrefab != null && redCastleMaterial != null && mazeExitCells.Count >= 2)
+        {
+            GameObject blueCastle = CreateCastle(DoorCell, blueCastlePrefab, blueCastleMaterial, "Generated Maze Blue Castle");
+            GameObject redCastle = CreateCastle(KeyCell, redCastlePrefab, redCastleMaterial, "Generated Maze Red Castle");
+            AddCastleColliders(redCastle, false);
+            AddCastleColliders(blueCastle, true);
+        }
+        else
+            Debug.LogWarning("Assign both castle prefabs and materials, and set at least two exits.", this);
+    }
+
+    private Vector3 CellCenter(Vector2Int cell)
+    {
+        float x = (cell.x + 0.5f) * cellSize - width * cellSize * 0.5f;
+        float z = height * cellSize * 0.5f - (cell.y + 0.5f) * cellSize;
+        return transform.position + new Vector3(x, 0f, z);
+    }
+
+    private void CreateKeyToken()
+    {
+        GameObject key = new GameObject("Generated Maze Key");
+        key.transform.SetParent(transform, true);
+        key.transform.localScale = Vector3.one * 0.45f;
+        Vector3 outward = ExitOutward(KeyCell);
+        Vector3 sideOffset = Mathf.Abs(outward.z) > 0.5f ? Vector3.right : Vector3.forward;
+        key.transform.position = CellCenter(KeyCell) +
+            outward * (cellSize * 0.5f + cellSize) +
+            sideOffset * (cellSize * 1.1f) + Vector3.up;
+
+        MeshFilter meshFilter = key.AddComponent<MeshFilter>();
+        meshFilter.sharedMesh = keyMesh;
+        MeshRenderer keyRenderer = key.AddComponent<MeshRenderer>();
+        keyRenderer.sharedMaterial = keyMaterial;
+
+        SphereCollider headCollider = key.AddComponent<SphereCollider>();
+        headCollider.radius = 0.75f;
+        Rigidbody body = key.AddComponent<Rigidbody>();
+        body.mass = 0.6f;
+        body.linearDamping = 0.15f;
+        body.angularDamping = 0.25f;
+        body.interpolation = RigidbodyInterpolation.Interpolate;
+        body.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        key.AddComponent<MazeKey>();
+
+        // Add a short shaft and teeth so the coin asset reads as a key in the maze.
+        CreateKeyPiece(key.transform, new Vector3(0.9f, 0f, 0f), new Vector3(1.4f, 0.16f, 0.18f));
+        CreateKeyPiece(key.transform, new Vector3(1.25f, 0f, 0.12f), new Vector3(0.18f, 0.16f, 0.38f));
+        CreateKeyPiece(key.transform, new Vector3(0.8f, 0f, 0.12f), new Vector3(0.18f, 0.16f, 0.3f));
+    }
+
+    private void CreateKeyPiece(Transform parent, Vector3 localPosition, Vector3 localScale)
+    {
+        GameObject piece = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        piece.name = "Key Detail";
+        piece.transform.SetParent(parent, false);
+        piece.transform.localPosition = localPosition;
+        piece.transform.localScale = localScale;
+        piece.GetComponent<Renderer>().sharedMaterial = keyMaterial;
+    }
+
+    private GameObject CreateCastle(Vector2Int exitCell, GameObject prefab, Material material, string objectName)
+    {
+        Vector3 outward = ExitOutward(exitCell);
+        float yaw = ExitYaw(exitCell);
+        GameObject castle = Instantiate(prefab, transform);
+        castle.name = objectName;
+        castle.transform.localScale = Vector3.one * castleScale;
+        castle.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+        Vector3 exitCenter = CellCenter(exitCell);
+        castle.transform.position = exitCenter + outward * (cellSize * 0.5f + cellSize * 2f);
+        foreach (Renderer renderer in castle.GetComponentsInChildren<Renderer>(true))
+            renderer.sharedMaterial = material;
+        return castle;
+    }
+
+    private void AddCastleColliders(GameObject castle, bool isBlueCastle)
+    {
+        foreach (MeshFilter meshFilter in castle.GetComponentsInChildren<MeshFilter>(true))
+        {
+            if (meshFilter.sharedMesh == null) continue;
+
+            // This is a small lock decoration; let the actual door leaves handle collisions.
+            if (meshFilter.name == "DoorMiddle")
+            {
+                Collider lockCollider = meshFilter.GetComponent<Collider>();
+                if (lockCollider != null) lockCollider.enabled = false;
+                continue;
+            }
+
+            bool isDoorLeaf = meshFilter.name.StartsWith("DoorL") || meshFilter.name.StartsWith("DoorR");
+            if (isDoorLeaf)
+            {
+                BoxCollider doorCollider = meshFilter.GetComponent<BoxCollider>();
+                if (doorCollider == null) doorCollider = meshFilter.gameObject.AddComponent<BoxCollider>();
+                doorCollider.center = meshFilter.sharedMesh.bounds.center;
+                doorCollider.size = meshFilter.sharedMesh.bounds.size;
+
+                if (isBlueCastle && meshFilter.GetComponent<MazeDoor>() == null)
+                    meshFilter.gameObject.AddComponent<MazeDoor>();
+            }
+            else
+            {
+                Collider existingCollider = meshFilter.GetComponent<Collider>();
+                if (existingCollider is MeshCollider) continue;
+                if (existingCollider != null) existingCollider.enabled = false;
+
+                MeshCollider meshCollider = meshFilter.gameObject.AddComponent<MeshCollider>();
+                meshCollider.sharedMesh = meshFilter.sharedMesh;
+                meshCollider.convex = false;
+            }
+        }
+    }
+
+    private Transform FindChild(Transform parent, string childName)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == childName) return child;
+            Transform result = FindChild(child, childName);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    private Vector3 ExitOutward(Vector2Int cell)
+    {
+        if (cell.y == 0) return Vector3.forward;
+        if (cell.y == height - 1) return Vector3.back;
+        if (cell.x == 0) return Vector3.left;
+        return Vector3.right;
+    }
+
+    private float ExitYaw(Vector2Int cell)
+    {
+        // The prefab doorway faces local +Z, so turn each castle toward the maze.
+        if (cell.y == 0) return 180f;
+        if (cell.y == height - 1) return 0f;
+        if (cell.x == 0) return 90f;
+        return -90f;
+    }
+
     private void PlaceWall(float x, float z, bool vertical)
     {
         Vector3 segmentPosition = transform.position + new Vector3(x, 0f, z);
@@ -405,9 +577,12 @@ public class MazeBuilder : MonoBehaviour
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
             Transform child = transform.GetChild(i);
-            if (child.name != "Generated Maze Wall" && child.name != "MazeWall" &&
+        if (child.name != "Generated Maze Wall" && child.name != "MazeWall" &&
                 child.name != "Generated Maze Floor" && child.name != "Generated Maze Entrance Platform" &&
-                child.name != "Generated Maze Exit Platform" && child.name != "Generated Maze Slime Water") continue;
+                child.name != "Generated Maze Exit Platform" && child.name != "Generated Maze Slime Water" &&
+                child.name != "Generated Maze Key" && child.name != "Generated Maze Door" &&
+                child.name != "Generated Maze Exit Castle" && child.name != "Generated Maze Blue Castle" &&
+                child.name != "Generated Maze Red Castle") continue;
 
             if (Application.isPlaying) Destroy(child.gameObject);
             else DestroyImmediate(child.gameObject);

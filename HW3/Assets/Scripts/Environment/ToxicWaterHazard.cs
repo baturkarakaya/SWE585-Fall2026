@@ -17,6 +17,7 @@ public class ToxicWaterHazard : MonoBehaviour
 
         if (player == null || playerCaught) return;
         playerCaught = true;
+        MazeRoundUI.BeginRoundEnd();
 
         foreach (CharacterController controller in player.GetComponentsInChildren<CharacterController>())
             controller.enabled = false;
@@ -52,5 +53,7 @@ public class ToxicWaterHazard : MonoBehaviour
             player.position = Vector3.Lerp(startPosition, endPosition, elapsed / sinkDuration);
             yield return null;
         }
+
+        MazeRoundUI.ShowDeath();
     }
 }
