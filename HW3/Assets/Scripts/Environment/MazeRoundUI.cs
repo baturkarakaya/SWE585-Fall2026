@@ -94,7 +94,7 @@ public class MazeRoundUI : MonoBehaviour
         GUI.color = oldColor;
 
         string title = playerWon ? "YOU ESCAPED" : "WASTED";
-        string message = playerWon ? "The key opened the castle gate." : deathMessage;
+        string message = playerWon ? "The key opened the wooden door." : deathMessage;
         Color titleColor = playerWon ? new Color(0.4f, 1f, 0.55f) : new Color(1f, 0.15f, 0.15f);
 
         GUIStyle titleStyle = new GUIStyle(GUI.skin.label);

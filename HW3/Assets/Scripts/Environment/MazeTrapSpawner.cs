@@ -9,14 +9,20 @@ public struct MazeTrapSpawnSite
     public GameObject floorTile;
     public int openPassages;
     public bool isStraightCorridor;
+    public bool northOpen;
+    public bool southOpen;
+    public bool eastOpen;
+    public bool westOpen;
 }
 
 // Selects safe maze cells and creates the different trap prefabs there.
 public class MazeTrapSpawner : MonoBehaviour
 {
     [Header("Trap Prefabs")]
-    [SerializeField] private GameObject spikeTrapPrefab;
-    [SerializeField] private GameObject trapDoorPrefab;
+    [SerializeField] private GameObject floorFireTrapPrefab;
+    [SerializeField] private GameObject floorFireVfxPrefab;
+    [SerializeField] private GameObject arrowTrapPrefab;
+    [SerializeField] private GameObject arrowProjectilePrefab;
     [SerializeField] private Material trapMaterial;
 
     [Header("Trap Count")]
@@ -28,13 +34,16 @@ public class MazeTrapSpawner : MonoBehaviour
     [SerializeField, Min(0.1f)] private float dangerDuration = 1.25f;
     [SerializeField, Min(0.1f)] private float animationLeadTime = 0.75f;
 
-    public void SpawnTraps(List<MazeTrapSpawnSite> openCells, Vector2Int playerStartCell,
-        Vector2Int keyExitCell, Vector2Int doorExitCell, float cellSize, float floorHeight,
+    public void SpawnTraps(List<MazeTrapSpawnSite> openCells, List<MazeWallSegment> wallSegments,
+        Vector2Int playerStartCell,
+        Vector2Int keyExitCell, Vector2Int doorExitCell, float cellSize, float wallThickness,
+        float floorHeight,
         int randomSeed, Transform generatedParent)
     {
-        if (spikeTrapPrefab == null || trapDoorPrefab == null)
+        if (floorFireTrapPrefab == null || floorFireVfxPrefab == null ||
+            arrowTrapPrefab == null || arrowProjectilePrefab == null)
         {
-            Debug.LogWarning("Assign the spike and trap door prefabs to MazeTrapSpawner.", this);
+            Debug.LogWarning("Assign the floor fire trap/VFX and arrow trap/projectile prefabs to MazeTrapSpawner.", this);
             return;
         }
 
@@ -51,8 +60,11 @@ public class MazeTrapSpawner : MonoBehaviour
             MazeTrapType type = (MazeTrapType)(i % 2);
             Vector3 scale = GetTrapScale(type, corridorWidth);
             string trapName = "Generated Maze Trap - " + GetTrapName(type) + " " + (i + 1);
-            CreateTrap(GetPrefab(type), selectedSites[i], trapName, type, scale, corridorWidth,
-                floorHeight, generatedParent);
+            Vector3 arrowDirection = type == MazeTrapType.Arrow
+                ? GetArrowDirection(selectedSites[i])
+                : Vector3.zero;
+            CreateTrap(GetPrefab(type), selectedSites[i], wallSegments, trapName, type, scale,
+                corridorWidth, cellSize, wallThickness, arrowDirection, floorHeight, generatedParent);
         }
     }
 
@@ -144,20 +156,29 @@ public class MazeTrapSpawner : MonoBehaviour
         return selected;
     }
 
-    private void CreateTrap(GameObject prefab, MazeTrapSpawnSite site, string trapName,
-        MazeTrapType type, Vector3 scale, float cellSize, float floorHeight, Transform generatedParent)
+    private void CreateTrap(GameObject prefab, MazeTrapSpawnSite site,
+        List<MazeWallSegment> wallSegments, string trapName,
+        MazeTrapType type, Vector3 scale, float corridorWidth, float mazeCellSize,
+        float wallThickness,
+        Vector3 arrowDirection,
+        float floorHeight, Transform generatedParent)
     {
         Vector3 position = site.floorPosition;
-        if (type == MazeTrapType.Spikes)
-            position.y = floorHeight + 2.1f * scale.y;
+        if (type == MazeTrapType.FloorFire)
+            position.y = floorHeight;
         else
-            position.y = floorHeight + 0.02f;
+        {
+            position = FindArrowMountPosition(site, wallSegments, arrowDirection,
+                wallThickness, scale, mazeCellSize, floorHeight);
+        }
 
         GameObject staging = new GameObject("Maze Trap Setup");
         staging.SetActive(false);
         GameObject trap = Instantiate(prefab, position, Quaternion.identity, staging.transform);
         trap.name = trapName;
         trap.transform.localScale = scale;
+        if (type == MazeTrapType.Arrow)
+            trap.transform.rotation = Quaternion.LookRotation(arrowDirection, Vector3.up);
 
         // Replace the pack's built-in Standard-shader material with a URP-compatible one.
         if (trapMaterial != null)
@@ -171,24 +192,65 @@ public class MazeTrapSpawner : MonoBehaviour
             }
         }
 
-        // The pack's demo scripts have their own timing. This component owns trap timing instead.
-        foreach (MonoBehaviour behaviour in trap.GetComponentsInChildren<MonoBehaviour>(true))
-        {
-            string behaviourName = behaviour.GetType().Name;
-            if (behaviourName == "SpikeTrapDemo" || behaviourName == "TrapDoorDemo")
-                behaviour.enabled = false;
-        }
-
-        if (type == MazeTrapType.Spikes || type == MazeTrapType.TrapDoor)
+        if (type == MazeTrapType.FloorFire)
             AlignVisualBottomWithFloor(trap, floorHeight);
 
         MazePeriodicTrap periodicTrap = trap.AddComponent<MazePeriodicTrap>();
-        periodicTrap.Initialize(type, site.floorTile, cellSize, floorHeight,
+        periodicTrap.Initialize(type, corridorWidth, floorHeight, arrowDirection,
+            // Include the launch offset and arrow length so its tip remains inside this cell.
+            Mathf.Max(0.5f, mazeCellSize - 1.6f),
+            arrowProjectilePrefab, floorFireVfxPrefab, trapMaterial,
             safeDuration, dangerDuration, animationLeadTime);
 
         trap.transform.SetParent(generatedParent, true);
         if (Application.isPlaying) Destroy(staging);
         else DestroyImmediate(staging);
+    }
+
+    private Vector3 FindArrowMountPosition(MazeTrapSpawnSite site,
+        List<MazeWallSegment> wallSegments, Vector3 shotDirection, float wallThickness,
+        Vector3 trapScale, float mazeCellSize, float floorHeight)
+    {
+        bool lookForVerticalWall = Mathf.Abs(shotDirection.x) > 0.5f;
+        Vector3 towardWall = -shotDirection;
+        MazeWallSegment? closestWall = null;
+        float closestDistance = float.PositiveInfinity;
+
+        foreach (MazeWallSegment wall in wallSegments)
+        {
+            if (wall.vertical != lookForVerticalWall) continue;
+
+            float alongWallDistance = lookForVerticalWall
+                ? Mathf.Abs(wall.position.z - site.floorPosition.z)
+                : Mathf.Abs(wall.position.x - site.floorPosition.x);
+            if (alongWallDistance > wall.length * 0.5f + 0.1f) continue;
+
+            float distance = Vector3.Dot(wall.position - site.floorPosition, towardWall);
+            if (distance <= 0f || distance >= closestDistance) continue;
+
+            closestDistance = distance;
+            closestWall = wall;
+        }
+
+        if (!closestWall.HasValue)
+        {
+            // Keep a safe fallback in case a custom maze layout has no wall segment on that side.
+            Vector3 fallback = site.floorPosition - shotDirection * (mazeCellSize * 0.5f - 0.55f);
+            fallback.y = floorHeight + 1.05f;
+            return fallback;
+        }
+
+        BoxCollider launcherCollider = arrowTrapPrefab == null
+            ? null
+            : arrowTrapPrefab.GetComponent<BoxCollider>();
+        float launcherDepth = launcherCollider == null
+            ? 0.18f
+            : launcherCollider.size.z * Mathf.Abs(trapScale.z);
+
+        Vector3 mountPosition = closestWall.Value.position + shotDirection *
+            (wallThickness * 0.5f + launcherDepth * 0.5f);
+        mountPosition.y = floorHeight + 1.05f;
+        return mountPosition;
     }
 
     private void AlignVisualBottomWithFloor(GameObject trap, float floorHeight)
@@ -218,21 +280,36 @@ public class MazeTrapSpawner : MonoBehaviour
     private Vector3 GetTrapScale(MazeTrapType type, float cellSize)
     {
         float cellScale = cellSize / 2f;
-        if (type == MazeTrapType.Spikes)
-            return Vector3.one * (0.65f * cellScale);
-        return Vector3.one * (0.5f * cellScale);
+        if (type == MazeTrapType.FloorFire)
+            return Vector3.one * (0.7f * cellScale);
+        return Vector3.one * (1.4f / 0.8276f);
+    }
+
+    private Vector3 GetArrowDirection(MazeTrapSpawnSite site)
+    {
+        int sideParity = (site.cell.x + site.cell.y) & 1;
+        if (site.eastOpen != site.westOpen)
+            return site.eastOpen ? Vector3.right : Vector3.left;
+        if (site.northOpen != site.southOpen)
+            return site.northOpen ? Vector3.forward : Vector3.back;
+
+        // A straight corridor has both directions open along its length, so
+        // fire across it from alternating side walls.
+        if (site.northOpen && site.southOpen)
+            return sideParity == 0 ? Vector3.right : Vector3.left;
+        return sideParity == 0 ? Vector3.forward : Vector3.back;
     }
 
     private GameObject GetPrefab(MazeTrapType type)
     {
-        if (type == MazeTrapType.Spikes) return spikeTrapPrefab;
-        return trapDoorPrefab;
+        if (type == MazeTrapType.FloorFire) return floorFireTrapPrefab;
+        return arrowTrapPrefab;
     }
 
     private string GetTrapName(MazeTrapType type)
     {
-        if (type == MazeTrapType.Spikes) return "Spikes";
-        return "Trap Door";
+        if (type == MazeTrapType.FloorFire) return "Floor Fire";
+        return "Arrow";
     }
 
     private int ManhattanDistance(Vector2Int a, Vector2Int b)

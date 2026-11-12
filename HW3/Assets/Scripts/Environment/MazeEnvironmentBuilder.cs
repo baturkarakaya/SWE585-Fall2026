@@ -23,8 +23,12 @@ public class MazeEnvironmentBuilder : MonoBehaviour
     [Header("Wall Assets")]
     [SerializeField] private GameObject wallPrefab;
     [SerializeField] private Material wallMaterial;
+    [SerializeField] private GameObject wallTorchPrefab;
+    [SerializeField, Min(1)] private int torchEveryWallSegments = 5;
 
     [Header("Floor and Water Assets")]
+    [SerializeField] private GameObject floorPrefab;
+    [SerializeField] private GameObject[] decorativePropPrefabs;
     [SerializeField] private Mesh floorMesh;
     [SerializeField] private Material floorMaterial;
     [SerializeField] private Material waterMaterial;
@@ -53,8 +57,18 @@ public class MazeEnvironmentBuilder : MonoBehaviour
         floorThickness = configuredFloorThickness;
         waterDepth = configuredWaterDepth;
 
+        int torchEligibleSegments = 0;
+        int torchCount = 0;
         foreach (MazeWallSegment segment in walls)
+        {
             PlaceWall(segment.position, segment.vertical, segment.length, cellSize, generatedParent);
+            if (wallTorchPrefab == null || segment.length < cellSize * 0.75f ||
+                IsOuterWall(segment, width, height, cellSize, generatedParent.position))
+                continue;
+
+            if (torchEligibleSegments++ % Mathf.Max(1, torchEveryWallSegments) == 0)
+                PlaceWallTorch(segment, torchCount++, generatedParent);
+        }
 
         DrawFloorAndWater(width, height, cellSize, floorCells, exitCells, generatedParent);
         Debug.Log("Built maze environment with " + walls.Count + " wall segments.", this);
@@ -65,7 +79,7 @@ public class MazeEnvironmentBuilder : MonoBehaviour
         List<MazeFloorCellData> pathCells, List<Vector2Int> exitCells, Transform generatedParent)
     {
         float spawnPadSize = cellSize * 1.5f;
-        float exitPlatformSize = cellSize * 6f;
+        float exitPlatformSize = cellSize * 1.5f;
         Vector3 origin = generatedParent.position;
         float floorY = origin.y - floorThickness * 0.5f;
 
@@ -110,7 +124,8 @@ public class MazeEnvironmentBuilder : MonoBehaviour
                 origin.x + spawnX,
                 floorY,
                 southEdge - spawnPadSize * 0.5f);
-            CreateFloorTile(entrancePadPosition, new Vector2(spawnPadSize, spawnPadSize),
+            CreateFloorTile(entrancePadPosition,
+                new Vector2(spawnPadSize, spawnPadSize),
                 "Generated Maze Entrance Platform", generatedParent);
 
             foreach (Vector2Int exitCell in exitCells)
@@ -120,7 +135,8 @@ public class MazeEnvironmentBuilder : MonoBehaviour
                 Vector3 outward = GetExitOutward(exitCell, width, height);
                 Vector3 padPosition = origin + new Vector3(centerX, floorY, centerZ);
                 padPosition += outward * (cellSize * 0.5f + exitPlatformSize * 0.5f);
-                CreateFloorTile(padPosition, new Vector2(exitPlatformSize, exitPlatformSize),
+                CreateFloorTile(padPosition,
+                    new Vector2(exitPlatformSize, exitPlatformSize),
                     "Generated Maze Exit Platform", generatedParent);
             }
         }
@@ -148,8 +164,123 @@ public class MazeEnvironmentBuilder : MonoBehaviour
         water.AddComponent<ToxicWaterHazard>();
     }
 
+    public void SpawnDecorations(List<MazeFloorCellData> pathCells, Vector2Int playerStartCell,
+        Vector2Int keyExitCell, Vector2Int doorExitCell, List<Vector2Int> exitCells,
+        float cellSize, float floorHeight, Transform generatedParent)
+    {
+        if (decorativePropPrefabs == null || decorativePropPrefabs.Length == 0) return;
+
+        int decorationIndex = 0;
+        foreach (MazeFloorCellData cell in pathCells)
+        {
+            int openPassages = 0;
+            if (cell.northOpen) openPassages++;
+            if (cell.southOpen) openPassages++;
+            if (cell.eastOpen) openPassages++;
+            if (cell.westOpen) openPassages++;
+
+            int propsForCell;
+            if (openPassages == 1)
+                propsForCell = 3;
+            else if (openPassages >= 3)
+                propsForCell = 1;
+            else continue;
+
+            if (cell.cell == playerStartCell || cell.cell == keyExitCell || cell.cell == doorExitCell ||
+                exitCells.Contains(cell.cell)) continue;
+
+            List<Vector3> closedSides = new List<Vector3>();
+            if (!cell.northOpen) closedSides.Add(Vector3.forward);
+            if (!cell.southOpen) closedSides.Add(Vector3.back);
+            if (!cell.eastOpen) closedSides.Add(Vector3.right);
+            if (!cell.westOpen) closedSides.Add(Vector3.left);
+            if (closedSides.Count == 0) continue;
+
+            GameObject floorCell;
+            if (!floorTiles.TryGetValue(cell.cell, out floorCell)) continue;
+            if (HasTrapInCell(generatedParent, floorCell.transform.position, cellSize * 0.52f)) continue;
+
+            for (int item = 0; item < propsForCell; item++)
+            {
+                GameObject prefab = decorativePropPrefabs[decorationIndex % decorativePropPrefabs.Length];
+                if (prefab == null) continue;
+
+                Vector3 side = closedSides[(decorationIndex + item) % closedSides.Count];
+                Vector3 position = floorCell.transform.position + side * (cellSize * 0.16f);
+                position.y = floorHeight;
+                GameObject prop = Instantiate(prefab, position,
+                    Quaternion.Euler(0f, (cell.cell.x * 37 + cell.cell.y * 53 + item * 71) % 360, 0f),
+                    generatedParent);
+                prop.name = "Generated Maze Prop " + (decorationIndex + 1);
+
+                if (wallMaterial != null)
+                {
+                    foreach (Renderer renderer in prop.GetComponentsInChildren<Renderer>(true))
+                        renderer.sharedMaterial = wallMaterial;
+                }
+
+                AlignPropToFloor(prop, floorHeight);
+                decorationIndex++;
+            }
+        }
+    }
+
+    private bool HasTrapInCell(Transform generatedParent, Vector3 cellCenter, float radius)
+    {
+        float radiusSquared = radius * radius;
+        for (int i = 0; i < generatedParent.childCount; i++)
+        {
+            Transform child = generatedParent.GetChild(i);
+            if (!child.name.StartsWith("Generated Maze Trap -")) continue;
+
+            Vector2 trapPosition = new Vector2(child.position.x, child.position.z);
+            Vector2 centerPosition = new Vector2(cellCenter.x, cellCenter.z);
+            if ((trapPosition - centerPosition).sqrMagnitude <= radiusSquared)
+                return true;
+        }
+
+        return false;
+    }
+
+    private void AlignPropToFloor(GameObject prop, float floorHeight)
+    {
+        Renderer[] renderers = prop.GetComponentsInChildren<Renderer>(true);
+        float lowestPoint = float.PositiveInfinity;
+        foreach (Renderer renderer in renderers)
+            lowestPoint = Mathf.Min(lowestPoint, renderer.bounds.min.y);
+
+        if (!float.IsInfinity(lowestPoint))
+            prop.transform.position += Vector3.up * (floorHeight - lowestPoint);
+    }
+
     private GameObject CreateFloorTile(Vector3 position, Vector2 size, string objectName, Transform parent)
     {
+        if (floorPrefab != null)
+        {
+            GameObject prefabTile = Instantiate(floorPrefab, position, Quaternion.identity, parent);
+            prefabTile.name = objectName;
+            BoxCollider prefabCollider = prefabTile.GetComponent<BoxCollider>();
+            float yScale = 1f;
+            if (prefabCollider != null)
+                yScale = floorThickness / Mathf.Max(prefabCollider.size.y, 0.001f);
+
+            prefabTile.transform.localScale = new Vector3(size.x * 0.5f, yScale, size.y * 0.5f);
+            if (prefabCollider != null)
+            {
+                position.y += floorThickness * 0.5f -
+                    (prefabCollider.center.y + prefabCollider.size.y * 0.5f) * yScale;
+                prefabTile.transform.position = position;
+            }
+
+            if (floorMaterial != null)
+            {
+                foreach (Renderer renderer in prefabTile.GetComponentsInChildren<Renderer>(true))
+                    renderer.sharedMaterial = floorMaterial;
+            }
+
+            return prefabTile;
+        }
+
         GameObject tile = new GameObject(objectName);
         tile.transform.SetParent(parent, true);
         tile.transform.position = position;
@@ -205,6 +336,45 @@ public class MazeEnvironmentBuilder : MonoBehaviour
         wall.transform.localScale = scale;
         wall.transform.position = desiredMeshCenter - rotation * Vector3.Scale(meshCenter, scale);
         wall.name = "Generated Maze Wall";
+    }
+
+    private bool IsOuterWall(MazeWallSegment segment, int width, int height, float cellSize, Vector3 origin)
+    {
+        float halfMazeWidth = width * cellSize * 0.5f;
+        float halfMazeDepth = height * cellSize * 0.5f;
+        if (segment.vertical)
+            return Mathf.Abs(Mathf.Abs(segment.position.x - origin.x) - halfMazeWidth) < 0.01f;
+
+        return Mathf.Abs(Mathf.Abs(segment.position.z - origin.z) - halfMazeDepth) < 0.01f;
+    }
+
+    private void PlaceWallTorch(MazeWallSegment segment, int torchIndex, Transform parent)
+    {
+        float side = torchIndex % 2 == 0 ? 1f : -1f;
+        Vector3 normal = (segment.vertical ? Vector3.right : Vector3.forward) * side;
+        float yaw = segment.vertical ? (side > 0f ? 90f : -90f) : (side > 0f ? 0f : 180f);
+
+        const float torchDepth = 0.2092f;
+        Vector3 position = segment.position + normal * (wallThickness * 0.5f + torchDepth * 0.5f + 0.01f);
+        position.y += wallHeightScale + wallBaseOffset + 0.35f;
+        GameObject torch = Instantiate(wallTorchPrefab, position, Quaternion.Euler(0f, yaw, 0f), parent);
+        torch.name = "Generated Maze Torch " + (torchIndex + 1);
+
+        if (wallMaterial != null)
+        {
+            foreach (Renderer renderer in torch.GetComponentsInChildren<Renderer>(true))
+                renderer.sharedMaterial = wallMaterial;
+        }
+
+        GameObject lightObject = new GameObject("Torch Light");
+        lightObject.transform.SetParent(torch.transform, false);
+        lightObject.transform.localPosition = new Vector3(0f, 0.3f, 0.16f);
+        Light torchLight = lightObject.AddComponent<Light>();
+        torchLight.type = LightType.Point;
+        torchLight.color = new Color(1f, 0.58f, 0.24f);
+        torchLight.intensity = 2f;
+        torchLight.range = 5f;
+        torchLight.shadows = LightShadows.None;
     }
 
     private Vector3 GetExitOutward(Vector2Int cell, int width, int height)

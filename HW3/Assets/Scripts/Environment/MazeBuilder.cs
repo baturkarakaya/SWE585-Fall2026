@@ -24,6 +24,13 @@ public class MazeBuilder : MonoBehaviour
     [SerializeField, Min(0.1f)] private float waterDepth = 1.5f;
     [SerializeField] private bool buildOnStart = true;
 
+    [Header("Guard")]
+    [SerializeField] private GameObject guardPrefab;
+    [SerializeField, Min(1)] private int guardCount = 2;
+    [SerializeField, Min(0.01f)] private float guardScale = 1f;
+    [SerializeField, Min(0.1f)] private float guardMoveSpeed = 5f;
+    [SerializeField, Min(0f)] private float guardPauseAtCell = 0.1f;
+
     private sealed class Cell
     {
         public bool north = true;
@@ -113,13 +120,91 @@ public class MazeBuilder : MonoBehaviour
             floorThickness, waterDepth, mazeExitCells, transform);
 
         List<MazeTrapSpawnSite> trapSites = CreateTrapSpawnSites(floorTiles);
-        trapSpawner.SpawnTraps(trapSites, PlayerStartCell, KeyCell, DoorCell, cellSize,
+        SpawnGuard();
+        trapSpawner.SpawnTraps(trapSites, walls, PlayerStartCell, KeyCell, DoorCell,
+            cellSize, wallThickness,
             transform.position.y, randomSeed, transform);
+        environmentBuilder.SpawnDecorations(floorCells, PlayerStartCell, KeyCell, DoorCell,
+            mazeExitCells, cellSize, transform.position.y, transform);
 
         objectiveSpawner.SpawnObjectives(KeyCell, DoorCell, width, height, cellSize, transform.position, transform);
         PlacePlayerAtStart();
 
         Debug.Log($"Generated {width}x{height} Aldous-Broder maze ({walls.Count} wall segments, {trapSites.Count} possible trap cells).", this);
+    }
+
+    private void SpawnGuard()
+    {
+        if (guardPrefab == null)
+        {
+            Debug.LogWarning("Assign a guard prefab to MazeBuilder.", this);
+            return;
+        }
+
+        Dictionary<Vector2Int, List<Vector2Int>> passages = new Dictionary<Vector2Int, List<Vector2Int>>();
+        Dictionary<Vector2Int, Vector3> worldPositions = new Dictionary<Vector2Int, Vector3>();
+        List<Vector2Int> eligibleCells = new List<Vector2Int>();
+        for (int y = 1; y < height - 1; y++)
+        for (int x = 1; x < width - 1; x++)
+        {
+            Vector2Int cellPosition = new Vector2Int(x, y);
+            worldPositions.Add(cellPosition, CellCenter(cellPosition));
+            Cell cell = cells[x, y];
+            List<Vector2Int> neighbors = new List<Vector2Int>();
+            if (!cell.north && IsInterior(cellPosition + Vector2Int.down)) neighbors.Add(cellPosition + Vector2Int.down);
+            if (!cell.south && IsInterior(cellPosition + Vector2Int.up)) neighbors.Add(cellPosition + Vector2Int.up);
+            if (!cell.east && IsInterior(cellPosition + Vector2Int.right)) neighbors.Add(cellPosition + Vector2Int.right);
+            if (!cell.west && IsInterior(cellPosition + Vector2Int.left)) neighbors.Add(cellPosition + Vector2Int.left);
+            passages.Add(cellPosition, neighbors);
+            if (neighbors.Count > 0 && ManhattanDistance(cellPosition, PlayerStartCell) >= 4)
+                eligibleCells.Add(cellPosition);
+        }
+
+        if (eligibleCells.Count == 0) return;
+
+        System.Random random = new System.Random(randomSeed + 2718);
+        for (int i = eligibleCells.Count - 1; i > 0; i--)
+        {
+            int swapIndex = random.Next(i + 1);
+            Vector2Int temporary = eligibleCells[i];
+            eligibleCells[i] = eligibleCells[swapIndex];
+            eligibleCells[swapIndex] = temporary;
+        }
+
+        int requestedCount = Mathf.Min(guardCount, eligibleCells.Count);
+        List<Vector2Int> selectedCells = new List<Vector2Int>();
+        for (int spacing = 3; spacing >= 1 && selectedCells.Count < requestedCount; spacing--)
+        {
+            foreach (Vector2Int candidate in eligibleCells)
+            {
+                if (selectedCells.Count >= requestedCount) break;
+
+                bool farEnough = true;
+                foreach (Vector2Int selected in selectedCells)
+                {
+                    if (ManhattanDistance(candidate, selected) < spacing)
+                    {
+                        farEnough = false;
+                        break;
+                    }
+                }
+
+                if (farEnough) selectedCells.Add(candidate);
+            }
+        }
+
+        for (int i = 0; i < selectedCells.Count; i++)
+        {
+            Vector2Int startCell = selectedCells[i];
+            Vector3 guardPosition = CellCenter(startCell);
+            guardPosition.y += floorThickness * 0.5f;
+            GameObject guard = Instantiate(guardPrefab, guardPosition, Quaternion.identity, transform);
+            guard.name = "Generated Maze Guard " + (i + 1);
+            guard.transform.localScale = Vector3.one * guardScale;
+            MazeGuardPatrol patrol = guard.AddComponent<MazeGuardPatrol>();
+            patrol.Initialize(passages, worldPositions, startCell, guardPosition.y,
+                guardMoveSpeed, guardPauseAtCell, randomSeed + i * 7919, cellSize);
+        }
     }
 
     private void GenerateCellLayout()
@@ -363,6 +448,10 @@ public class MazeBuilder : MonoBehaviour
             site.isStraightCorridor =
                 (!cell.north && !cell.south && cell.east && cell.west) ||
                 (!cell.east && !cell.west && cell.north && cell.south);
+            site.northOpen = !cell.north;
+            site.southOpen = !cell.south;
+            site.eastOpen = !cell.east;
+            site.westOpen = !cell.west;
             sites.Add(site);
         }
 
@@ -417,6 +506,12 @@ public class MazeBuilder : MonoBehaviour
     private bool Inside(Vector2Int position)
     {
         return position.x >= 0 && position.x < width && position.y >= 0 && position.y < height;
+    }
+
+    private bool IsInterior(Vector2Int position)
+    {
+        return position.x > 0 && position.x < width - 1 &&
+            position.y > 0 && position.y < height - 1;
     }
 
     private void RemoveSharedWall(Vector2Int a, Vector2Int b)
