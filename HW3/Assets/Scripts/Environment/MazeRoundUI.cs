@@ -9,6 +9,7 @@ public class MazeRoundUI : MonoBehaviour
 
     private bool showPanel;
     private bool playerWon;
+    private string deathMessage = "You are dead. The slime got you.";
 
     public static bool IsRoundEnding
     {
@@ -37,7 +38,33 @@ public class MazeRoundUI : MonoBehaviour
 
     public static void ShowDeath()
     {
+        ShowDeath("You are dead. The slime got you.");
+    }
+
+    public static void ShowDeath(string message)
+    {
+        if (instance == null) instance = FindObjectOfType<MazeRoundUI>();
+        if (instance != null) instance.deathMessage = message;
         ShowResult(false);
+    }
+
+    public static void KillPlayer(Transform player, string message)
+    {
+        if (player == null || roundEnding) return;
+
+        BeginRoundEnd();
+        foreach (CharacterController controller in player.GetComponentsInChildren<CharacterController>())
+            controller.enabled = false;
+
+        foreach (MonoBehaviour behaviour in player.GetComponentsInChildren<MonoBehaviour>())
+        {
+            string componentName = behaviour.GetType().Name;
+            if (componentName == "PlayerController" || componentName == "ThirdPersonController" ||
+                componentName == "FirstPersonController")
+                behaviour.enabled = false;
+        }
+
+        ShowDeath(message);
     }
 
     private static void ShowResult(bool won)
@@ -67,7 +94,7 @@ public class MazeRoundUI : MonoBehaviour
         GUI.color = oldColor;
 
         string title = playerWon ? "YOU ESCAPED" : "WASTED";
-        string message = playerWon ? "The key opened the castle gate." : "You are dead. The slime got you.";
+        string message = playerWon ? "The key opened the castle gate." : deathMessage;
         Color titleColor = playerWon ? new Color(0.4f, 1f, 0.55f) : new Color(1f, 0.15f, 0.15f);
 
         GUIStyle titleStyle = new GUIStyle(GUI.skin.label);
