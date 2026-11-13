@@ -88,7 +88,7 @@ public class MazeRoundUI : MonoBehaviour
     {
         if (!showPanel)
         {
-            Rect legendRect = new Rect(Screen.width - 420f, 24f, 390f, 82f);
+            Rect legendRect = new Rect(Screen.width - 420f, 24f, 390f, 126f);
             Color previousColor = GUI.color;
             GUI.color = new Color(0f, 0f, 0f, 0.8f);
             GUI.DrawTexture(legendRect, Texture2D.whiteTexture);
@@ -99,7 +99,7 @@ public class MazeRoundUI : MonoBehaviour
             legendStyle.fontStyle = FontStyle.Bold;
             legendStyle.fontSize = 32;
             legendStyle.normal.textColor = Color.white;
-            GUI.Label(legendRect, "Toggle Music: M", legendStyle);
+            GUI.Label(legendRect, "Toggle Music: M\nPick Up / Drop Key: E", legendStyle);
         }
 
         if (!showPanel) return;

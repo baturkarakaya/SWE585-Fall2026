@@ -8,26 +8,26 @@ using UnityEngine;
 public class MazeBuilder : MonoBehaviour
 {
     [Header("Maze Settings")]
-    [SerializeField] private int width = 21;
-    [SerializeField] private int height = 21;
-    [SerializeField, Range(0f, 0.5f)] private float extraPathProbability = 0.08f;
-    [SerializeField] private int randomSeed = 585;
+    [SerializeField] private int width = 6;
+    [SerializeField] private int height = 6;
+    [SerializeField, Range(0f, 0.5f)] private float extraPathProbability = 0.03f;
+    [SerializeField] private int randomSeed = 85;
     [SerializeField, Min(1)] private int exitCount = 2;
-    [SerializeField, Min(0f)] private float playerStartDistanceFromGate = 3f;
+    [SerializeField, Min(0f)] private float playerStartDistanceFromGate = 5f;
 
     [Header("Layout Settings")]
-    [SerializeField, Min(0.1f)] private float cellSize = 2f;
-    [SerializeField, Min(0.1f)] private float wallThickness = 0.75f;
+    [SerializeField, Min(0.1f)] private float cellSize = 8f;
+    [SerializeField, Min(0.1f)] private float wallThickness = 0.5f;
     [SerializeField, Range(0.25f, 2.5f)] private float wallHeightScale = 2.5f;
-    [SerializeField] private float wallBaseOffset = -0.25f;
-    [SerializeField, Min(0.01f)] private float floorThickness = 0.15f;
-    [SerializeField, Min(0.1f)] private float waterDepth = 1.5f;
+    [SerializeField] private float wallBaseOffset = -0.15f;
+    [SerializeField, Min(0.01f)] private float floorThickness = 0.5f;
+    [SerializeField, Min(0.1f)] private float waterDepth = 5f;
     [SerializeField] private bool buildOnStart = true;
 
     [Header("Guard")]
     [SerializeField] private GameObject guardPrefab;
     [SerializeField, Min(1)] private int guardCount = 2;
-    [SerializeField, Min(0.01f)] private float guardScale = 1f;
+    [SerializeField, Min(0.01f)] private float guardScale = 1.5f;
     [SerializeField, Min(0.1f)] private float guardMoveSpeed = 5f;
     [SerializeField, Min(0f)] private float guardPauseAtCell = 0.1f;
 
@@ -479,7 +479,7 @@ public class MazeBuilder : MonoBehaviour
             : playerCollider.bounds.center - player.transform.position;
         Vector3 desiredColliderCenter = new Vector3(
             transform.position.x + x,
-            playerCollider == null ? player.transform.position.y : playerCollider.bounds.center.y,
+            transform.position.y + (playerCollider == null ? 0.9f : playerCollider.bounds.extents.y),
             southEdge - colliderDepth - playerStartDistanceFromGate);
         Vector3 startPosition = desiredColliderCenter - colliderCenterOffset;
 

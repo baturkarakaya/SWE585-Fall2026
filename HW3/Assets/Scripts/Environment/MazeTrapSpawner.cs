@@ -26,11 +26,11 @@ public class MazeTrapSpawner : MonoBehaviour
     [SerializeField] private Material trapMaterial;
 
     [Header("Trap Count")]
-    [SerializeField, Min(1)] private int trapsPerType = 2;
+    [SerializeField, Min(1)] private int trapsPerType = 5;
     [SerializeField, Min(1)] private int preferredCellSpacing = 4;
 
     [Header("Trap Timing")]
-    [SerializeField, Min(0.1f)] private float safeDuration = 2.5f;
+    [SerializeField, Min(0.1f)] private float safeDuration = 2f;
     [SerializeField, Min(0.1f)] private float dangerDuration = 1.25f;
     [SerializeField, Min(0.1f)] private float animationLeadTime = 0.75f;
 
@@ -74,17 +74,23 @@ public class MazeTrapSpawner : MonoBehaviour
     {
         List<MazeTrapSpawnSite> straightCorridors = new List<MazeTrapSpawnSite>();
         List<MazeTrapSpawnSite> turningCorridors = new List<MazeTrapSpawnSite>();
+        List<MazeTrapSpawnSite> otherSafeCells = new List<MazeTrapSpawnSite>();
 
         foreach (MazeTrapSpawnSite site in openCells)
         {
-            // Two open sides identify a corridor. Junctions and dead ends are skipped.
-            if (site.openPassages != 2) continue;
             if (ManhattanDistance(site.cell, playerStartCell) < 3) continue;
             if (ManhattanDistance(site.cell, keyExitCell) < 2) continue;
             if (ManhattanDistance(site.cell, doorExitCell) < 2) continue;
 
-            if (site.isStraightCorridor) straightCorridors.Add(site);
-            else turningCorridors.Add(site);
+            if (site.openPassages == 2)
+            {
+                if (site.isStraightCorridor) straightCorridors.Add(site);
+                else turningCorridors.Add(site);
+            }
+            else
+            {
+                otherSafeCells.Add(site);
+            }
         }
 
         System.Random random = new System.Random(randomSeed + 1337);
@@ -94,9 +100,10 @@ public class MazeTrapSpawner : MonoBehaviour
         List<MazeTrapSpawnSite> selected = SelectSpacedSites(straightCorridors, requestedCount);
         if (selected.Count < requestedCount)
         {
-            // Bends are a fallback only; traps are never placed at intersections.
             selected.AddRange(SelectSpacedSites(turningCorridors, requestedCount - selected.Count, selected));
         }
+        if (selected.Count < requestedCount)
+            selected.AddRange(SelectSpacedSites(otherSafeCells, requestedCount - selected.Count, selected));
 
         return selected;
     }
@@ -118,7 +125,7 @@ public class MazeTrapSpawner : MonoBehaviour
         List<MazeTrapSpawnSite> selected = new List<MazeTrapSpawnSite>();
         int startingSpacing = Mathf.Max(2, preferredCellSpacing);
 
-        for (int spacing = startingSpacing; spacing >= 2 && selected.Count < requestedCount; spacing--)
+        for (int spacing = startingSpacing; spacing >= 1 && selected.Count < requestedCount; spacing--)
         {
             foreach (MazeTrapSpawnSite candidate in candidates)
             {

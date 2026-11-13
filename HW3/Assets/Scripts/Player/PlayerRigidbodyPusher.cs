@@ -4,7 +4,7 @@ using UnityEngine;
 [RequireComponent(typeof(CharacterController))]
 public class PlayerRigidbodyPusher : MonoBehaviour
 {
-    [SerializeField, Min(0f)] private float pushPower = 2.5f;
+    [SerializeField, Min(0f)] private float pushPower = 5f;
 
     private void OnControllerColliderHit(ControllerColliderHit hit)
     {
