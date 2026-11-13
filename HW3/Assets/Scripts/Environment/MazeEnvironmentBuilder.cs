@@ -17,7 +17,7 @@ public struct MazeFloorCellData
     public bool westOpen;
 }
 
-// Builds the maze's walls, floor tiles, entrance and exit platforms, and slime water.
+// Builds the maze's walls, floor tiles, entrance, and exit platforms.
 public class MazeEnvironmentBuilder : MonoBehaviour
 {
     [Header("Wall Assets")]
@@ -141,27 +141,6 @@ public class MazeEnvironmentBuilder : MonoBehaviour
             }
         }
 
-        if (waterMaterial == null) return;
-
-        float mazeWidth = width * cellSize;
-        float mazeDepth = height * cellSize;
-        GameObject water = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        water.transform.SetParent(generatedParent, true);
-        water.transform.position = origin + Vector3.down * waterDepth;
-        water.name = "Generated Maze Slime Water";
-        water.transform.localScale = new Vector3(
-            (mazeWidth + exitPlatformSize * 2f) / 10f,
-            1f,
-            (mazeDepth + exitPlatformSize * 2f) / 10f);
-        water.GetComponent<Renderer>().sharedMaterial = waterMaterial;
-
-        Collider waterCollider = water.GetComponent<Collider>();
-        if (waterCollider != null) waterCollider.enabled = false;
-        water.AddComponent<WaterTextureScroller>();
-        BoxCollider hazardTrigger = water.AddComponent<BoxCollider>();
-        hazardTrigger.isTrigger = true;
-        hazardTrigger.size = new Vector3(10f, 1f, 10f);
-        water.AddComponent<ToxicWaterHazard>();
     }
 
     public void SpawnDecorations(List<MazeFloorCellData> pathCells, Vector2Int playerStartCell,

@@ -39,9 +39,7 @@ public class MazeObjectiveSpawner : MonoBehaviour
         Vector3 jailOutward = GetExitOutward(keyExitCell, width, height);
         Vector3 jailCenter = ExitPlatformCenter(keyExitCell, width, height, cellSize, platformOrigin, platformSize);
         BuildPlatformEnclosure(jailCenter, jailOutward, platformSize, cellSize, platformOrigin.y,
-            flatDoorwayPrefab, "Generated Maze Key Platform", generatedParent);
-        CreateOpenJail(jailCenter, jailOutward, cellSize, platformOrigin.y, generatedParent);
-
+            jailWallPrefab, flatDoorwayPrefab, "Generated Maze Key Platform", generatedParent);
         if (keyMesh != null && keyMaterial != null)
             CreateKey(jailCenter - jailOutward * 0.45f + Vector3.up * 0.65f, generatedParent);
         else
@@ -51,47 +49,50 @@ public class MazeObjectiveSpawner : MonoBehaviour
         Vector3 doorPlatformCenter = ExitPlatformCenter(doorExitCell, width, height,
             cellSize, platformOrigin, platformSize);
         BuildPlatformEnclosure(doorPlatformCenter, doorOutward, platformSize, cellSize, platformOrigin.y,
-            flatDoorwayPrefab, "Generated Maze Door Platform", generatedParent);
+            flatWallPrefab, flatDoorwayPrefab, "Generated Maze Door Platform", generatedParent);
         Vector3 doorPosition = doorPlatformCenter - doorOutward * (platformSize * 0.5f);
         CreateWoodenExitDoor(doorPosition, doorOutward, cellSize, platformOrigin.y, generatedParent);
 
         float spawnPadSize = cellSize * 1.5f;
-        float southEdge = origin.z - height * cellSize * 0.5f;
-        float spawnX = (width / 2f + 0.5f) * cellSize - width * cellSize * 0.5f;
-        Vector3 startCenter = new Vector3(origin.x + spawnX, platformOrigin.y,
-            southEdge - spawnPadSize * 0.5f);
+        Vector2Int playerEntranceCell = new Vector2Int(width / 2, height - 1);
+        Vector3 entranceCellCenter = CellCenter(playerEntranceCell, width, height,
+            cellSize, platformOrigin);
+        float mazeSouthEdge = platformOrigin.z - height * cellSize * 0.5f;
+        Vector3 startCenter = new Vector3(entranceCellCenter.x, platformOrigin.y,
+            mazeSouthEdge - spawnPadSize * 0.5f);
         Vector3 startOutward = Vector3.back;
         BuildPlatformEnclosure(startCenter, startOutward, spawnPadSize, cellSize, platformOrigin.y,
-            jailDoorwayPrefab, "Generated Maze Starting Platform", generatedParent);
-        CreateOpenStartingGate(startCenter, startOutward, spawnPadSize, cellSize,
-            platformOrigin.y, generatedParent);
+            flatWallPrefab, flatDoorwayPrefab, "Generated Maze Starting Platform", generatedParent);
     }
 
     private void BuildPlatformEnclosure(Vector3 center, Vector3 outward, float platformSize,
-        float cellSize, float floorHeight, GameObject doorwayPrefab, string objectName,
+        float cellSize, float floorHeight, GameObject wallPrefab, GameObject doorwayPrefab, string objectName,
         Transform generatedParent)
     {
-        const float wallHeight = 3f;
+        const float wallHeight = 5f;
         const float wallDepth = 0.5f;
         float halfSize = platformSize * 0.5f;
+        // Keep the room entrance the same width as the maze corridor so its jambs
+        // start at the corridor wall ends instead of overlapping them.
         float openingWidth = cellSize * 0.5f;
         Vector3 side = Mathf.Abs(outward.z) > 0.5f ? Vector3.right : Vector3.forward;
 
         PlaceWallRun(center + outward * halfSize, side, outward, platformSize,
-            floorHeight, wallHeight, wallDepth, objectName + " Back Wall", generatedParent);
+            floorHeight, wallHeight, wallDepth, wallPrefab, objectName + " Back Wall", generatedParent);
         PlaceWallRun(center + side * halfSize, outward, side, platformSize,
-            floorHeight, wallHeight, wallDepth, objectName + " Side Wall", generatedParent);
+            floorHeight, wallHeight, wallDepth, wallPrefab, objectName + " Side Wall", generatedParent);
         PlaceWallRun(center - side * halfSize, outward, -side, platformSize,
-            floorHeight, wallHeight, wallDepth, objectName + " Side Wall", generatedParent);
+            floorHeight, wallHeight, wallDepth, wallPrefab, objectName + " Side Wall", generatedParent);
 
         Vector3 entranceCenter = center - outward * halfSize;
         float flankLength = (platformSize - openingWidth) * 0.5f;
         PlaceWallRun(entranceCenter - side * (openingWidth * 0.5f + flankLength * 0.5f),
             side, -outward, flankLength, floorHeight, wallHeight, wallDepth,
-            objectName + " Entrance Wall", generatedParent);
+            wallPrefab, objectName + " Entrance Wall", generatedParent);
         PlaceWallRun(entranceCenter + side * (openingWidth * 0.5f + flankLength * 0.5f),
             side, -outward, flankLength, floorHeight, wallHeight, wallDepth,
-            objectName + " Entrance Wall", generatedParent);
+            wallPrefab, objectName + " Entrance Wall", generatedParent);
+        if (doorwayPrefab == null) return;
 
         Vector3 doorwayPosition = entranceCenter;
         doorwayPosition.y = floorHeight;
@@ -103,7 +104,7 @@ public class MazeObjectiveSpawner : MonoBehaviour
     }
 
     private void PlaceWallRun(Vector3 center, Vector3 tangent, Vector3 normal, float length,
-        float floorHeight, float wallHeight, float wallDepth, string objectName,
+        float floorHeight, float wallHeight, float wallDepth, GameObject wallPrefab, string objectName,
         Transform generatedParent)
     {
         const float moduleLength = 2f;
@@ -118,7 +119,7 @@ public class MazeObjectiveSpawner : MonoBehaviour
 
             Vector3 position = center + tangent * (start + i * moduleLength + segmentLength * 0.5f);
             position.y = floorHeight + wallHeight * 0.5f;
-            GameObject wall = CreateStructure(flatWallPrefab, position, rotation,
+            GameObject wall = CreateStructure(wallPrefab, position, rotation,
                 new Vector3(segmentLength * 0.5f, wallHeight * 0.5f, wallDepth / 0.25046f),
                 objectName, generatedParent);
             AlignStructureToFloor(wall, floorHeight);
@@ -136,7 +137,7 @@ public class MazeObjectiveSpawner : MonoBehaviour
 
         GameObject gate = CreateStructure(jailDoorPrefab, openPosition,
             Quaternion.LookRotation(-outward, Vector3.up) * Quaternion.Euler(0f, 90f, 0f),
-            structureScale, "Generated Maze Starting Gate (Open)", generatedParent);
+            structureScale * 2f, "Generated Maze Starting Gate (Open)", generatedParent);
         AlignStructureToFloor(gate, floorHeight);
     }
 
@@ -178,7 +179,7 @@ public class MazeObjectiveSpawner : MonoBehaviour
             : sourceCollider.size;
         Vector3 doorScale = new Vector3(
             cellSize * 0.5f * 0.98f / Mathf.Max(sourceSize.x, 0.001f),
-            3f / Mathf.Max(sourceSize.y, 0.001f),
+            6f / Mathf.Max(sourceSize.y, 0.001f),
             0.5f / Mathf.Max(sourceSize.z, 0.001f));
         GameObject door = CreateStructure(woodenDoorPrefab, position, rotation, doorScale,
             "Generated Maze Wooden Door", generatedParent);
@@ -197,6 +198,7 @@ public class MazeObjectiveSpawner : MonoBehaviour
 
         if (door.GetComponent<MazeDoor>() == null)
             door.AddComponent<MazeDoor>();
+
     }
 
     private GameObject CreateStructure(GameObject prefab, Vector3 position, Quaternion rotation,

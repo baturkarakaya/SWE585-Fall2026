@@ -18,7 +18,7 @@ public class MazeBuilder : MonoBehaviour
     [Header("Layout Settings")]
     [SerializeField, Min(0.1f)] private float cellSize = 2f;
     [SerializeField, Min(0.1f)] private float wallThickness = 0.75f;
-    [SerializeField, Range(0.25f, 1.5f)] private float wallHeightScale = 1.5f;
+    [SerializeField, Range(0.25f, 2.5f)] private float wallHeightScale = 2.5f;
     [SerializeField] private float wallBaseOffset = -0.25f;
     [SerializeField, Min(0.01f)] private float floorThickness = 0.15f;
     [SerializeField, Min(0.1f)] private float waterDepth = 1.5f;

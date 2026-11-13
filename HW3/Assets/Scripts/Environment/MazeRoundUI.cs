@@ -86,6 +86,22 @@ public class MazeRoundUI : MonoBehaviour
 
     private void OnGUI()
     {
+        if (!showPanel)
+        {
+            Rect legendRect = new Rect(Screen.width - 420f, 24f, 390f, 82f);
+            Color previousColor = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.8f);
+            GUI.DrawTexture(legendRect, Texture2D.whiteTexture);
+            GUI.color = previousColor;
+
+            GUIStyle legendStyle = new GUIStyle(GUI.skin.label);
+            legendStyle.alignment = TextAnchor.MiddleCenter;
+            legendStyle.fontStyle = FontStyle.Bold;
+            legendStyle.fontSize = 32;
+            legendStyle.normal.textColor = Color.white;
+            GUI.Label(legendRect, "Toggle Music: M", legendStyle);
+        }
+
         if (!showPanel) return;
 
         Color oldColor = GUI.color;
