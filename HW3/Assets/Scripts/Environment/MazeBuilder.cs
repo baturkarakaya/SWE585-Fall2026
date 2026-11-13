@@ -21,7 +21,6 @@ public class MazeBuilder : MonoBehaviour
     [SerializeField, Range(0.25f, 2.5f)] private float wallHeightScale = 2.5f;
     [SerializeField] private float wallBaseOffset = -0.15f;
     [SerializeField, Min(0.01f)] private float floorThickness = 0.5f;
-    [SerializeField, Min(0.1f)] private float waterDepth = 5f;
     [SerializeField] private bool buildOnStart = true;
 
     [Header("Guard")]
@@ -117,7 +116,7 @@ public class MazeBuilder : MonoBehaviour
         List<MazeFloorCellData> floorCells = CollectFloorCells();
         Dictionary<Vector2Int, GameObject> floorTiles = environmentBuilder.BuildMaze(
             walls, floorCells, width, height, cellSize, wallThickness, wallHeightScale, wallBaseOffset,
-            floorThickness, waterDepth, mazeExitCells, transform);
+            floorThickness, mazeExitCells, transform);
 
         List<MazeTrapSpawnSite> trapSites = CreateTrapSpawnSites(floorTiles);
         SpawnGuard();

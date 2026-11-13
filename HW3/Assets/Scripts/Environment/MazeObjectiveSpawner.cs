@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// Places an open jail cell with the key at one exit and a locked wooden door at the other.
+// Creates the key exit, locked door exit, and player entrance platforms.
 public class MazeObjectiveSpawner : MonoBehaviour
 {
     [Header("Key")]
@@ -8,10 +8,7 @@ public class MazeObjectiveSpawner : MonoBehaviour
     [SerializeField] private Material keyMaterial;
 
     [Header("Exit Structure Prefabs")]
-    [SerializeField] private GameObject jailColumnPrefab;
     [SerializeField] private GameObject jailWallPrefab;
-    [SerializeField] private GameObject jailDoorwayPrefab;
-    [SerializeField] private GameObject jailDoorPrefab;
     [SerializeField] private GameObject woodenDoorPrefab;
     [SerializeField] private GameObject flatWallPrefab;
     [SerializeField] private GameObject flatDoorwayPrefab;
@@ -26,8 +23,7 @@ public class MazeObjectiveSpawner : MonoBehaviour
             return;
         }
 
-        if (jailColumnPrefab == null || jailWallPrefab == null || jailDoorwayPrefab == null ||
-            jailDoorPrefab == null || woodenDoorPrefab == null || flatWallPrefab == null ||
+        if (jailWallPrefab == null || woodenDoorPrefab == null || flatWallPrefab == null ||
             flatDoorwayPrefab == null || structureMaterial == null)
         {
             Debug.LogWarning("Assign the jail, flat wall/doorway, wooden door, and structure material assets.", this);
@@ -123,49 +119,6 @@ public class MazeObjectiveSpawner : MonoBehaviour
                 new Vector3(segmentLength * 0.5f, wallHeight * 0.5f, wallDepth / 0.25046f),
                 objectName, generatedParent);
             AlignStructureToFloor(wall, floorHeight);
-        }
-    }
-
-    private void CreateOpenStartingGate(Vector3 center, Vector3 outward, float platformSize,
-        float cellSize, float floorHeight, Transform generatedParent)
-    {
-        float structureScale = cellSize / 4.5f;
-        Vector3 side = Mathf.Abs(outward.z) > 0.5f ? Vector3.right : Vector3.forward;
-        Vector3 entranceCenter = center - outward * (platformSize * 0.5f);
-        Vector3 openPosition = entranceCenter + side * (cellSize * 0.12f) - outward * 0.7f;
-        openPosition.y = floorHeight + structureScale;
-
-        GameObject gate = CreateStructure(jailDoorPrefab, openPosition,
-            Quaternion.LookRotation(-outward, Vector3.up) * Quaternion.Euler(0f, 90f, 0f),
-            structureScale * 2f, "Generated Maze Starting Gate (Open)", generatedParent);
-        AlignStructureToFloor(gate, floorHeight);
-    }
-
-    private void CreateOpenJail(Vector3 center, Vector3 outward, float cellSize,
-        float floorHeight, Transform generatedParent)
-    {
-        center.y = floorHeight;
-        float structureScale = cellSize / 4.5f;
-        float halfSize = structureScale;
-        Vector3 side = Mathf.Abs(outward.z) > 0.5f ? Vector3.right : Vector3.forward;
-        Quaternion backRotation = Quaternion.LookRotation(outward, Vector3.up);
-        Quaternion sideRotation = Quaternion.LookRotation(side, Vector3.up);
-        float centerHeight = structureScale;
-
-        CreateStructure(jailWallPrefab, center + outward * halfSize + Vector3.up * centerHeight,
-            backRotation, structureScale, "Generated Maze Jail Back Wall", generatedParent);
-        CreateStructure(jailWallPrefab, center + side * halfSize + Vector3.up * centerHeight,
-            sideRotation, structureScale, "Generated Maze Jail Side Wall", generatedParent);
-        CreateStructure(jailWallPrefab, center - side * halfSize + Vector3.up * centerHeight,
-            sideRotation, structureScale, "Generated Maze Jail Side Wall", generatedParent);
-
-        for (int sideSign = -1; sideSign <= 1; sideSign += 2)
-        for (int depthSign = -1; depthSign <= 1; depthSign += 2)
-        {
-            Vector3 postPosition = center + side * (sideSign * halfSize) +
-                outward * (depthSign * halfSize) + Vector3.up * centerHeight;
-            CreateStructure(jailColumnPrefab, postPosition, Quaternion.identity, structureScale,
-                "Generated Maze Jail Column", generatedParent);
         }
     }
 

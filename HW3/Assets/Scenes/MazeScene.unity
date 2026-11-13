@@ -29976,7 +29976,6 @@ MonoBehaviour:
   wallHeightScale: 2.5
   wallBaseOffset: -0.15
   floorThickness: 0.5
-  waterDepth: 5
   buildOnStart: 1
   guardPrefab: {fileID: 1275816425450267734, guid: 95c51c9fa4cf72449a1426f959291fee, type: 3}
   guardCount: 1
@@ -30028,7 +30027,6 @@ MonoBehaviour:
   - {fileID: 7100443600350587108, guid: 1d18fd1a01dedd74b86d9e3675936f76, type: 3}
   floorMesh: {fileID: 4300000, guid: 9785164cfb353eb4d9ae55cc30780781, type: 3}
   floorMaterial: {fileID: 2100000, guid: 6d95a304c1124e38b7d25a6ac721cfab, type: 2}
-  waterMaterial: {fileID: 2100000, guid: 8b189ae4f9734c32bf79c98771eaa336, type: 2}
   floorPathWidthRatio: 0.6
 --- !u!114 &901230006
 MonoBehaviour:
@@ -30044,10 +30042,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MazeObjectiveSpawner
   keyMesh: {fileID: 4300000, guid: 24459aceb5e9d4d4e889d002999dfa81, type: 3}
   keyMaterial: {fileID: 2100000, guid: d2f2a8a0795a4ad4ab86078c84850748, type: 2}
-  jailColumnPrefab: {fileID: 1833118334673712040, guid: a5b211f73859b9842965c4130fcf7664, type: 3}
   jailWallPrefab: {fileID: 2000719113221279303, guid: f5a42311009a9674fbc37df24a9a3d0c, type: 3}
-  jailDoorwayPrefab: {fileID: 8271837103749127074, guid: b9661431615f91b4db8782055335b4d5, type: 3}
-  jailDoorPrefab: {fileID: 8062180683348865409, guid: c7893fc5ac313814999e5d23026eecd3, type: 3}
   woodenDoorPrefab: {fileID: 5222212056441733332, guid: 6d7a739afa8840e47b2269073a4ea42e, type: 3}
   flatWallPrefab: {fileID: 9104321445825918880, guid: 166b92b7222fe8344a671615701d3657, type: 3}
   flatDoorwayPrefab: {fileID: 5902516603717596668, guid: 7a756a1138b5901419953d835ddb6483, type: 3}

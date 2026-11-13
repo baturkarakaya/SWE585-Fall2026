@@ -31,14 +31,12 @@ public class MazeEnvironmentBuilder : MonoBehaviour
     [SerializeField] private GameObject[] decorativePropPrefabs;
     [SerializeField] private Mesh floorMesh;
     [SerializeField] private Material floorMaterial;
-    [SerializeField] private Material waterMaterial;
     [SerializeField, Range(0.25f, 0.75f)] private float floorPathWidthRatio = 0.5f;
 
     private float wallHeightScale;
     private float wallBaseOffset;
     private float wallThickness;
     private float floorThickness;
-    private float waterDepth;
 
     private readonly Dictionary<Vector2Int, GameObject> floorTiles = new Dictionary<Vector2Int, GameObject>();
 
@@ -46,7 +44,7 @@ public class MazeEnvironmentBuilder : MonoBehaviour
         List<MazeFloorCellData> floorCells,
         int width, int height, float cellSize, float configuredWallThickness,
         float configuredWallHeight, float configuredWallBaseOffset, float configuredFloorThickness,
-        float configuredWaterDepth, List<Vector2Int> exitCells, Transform generatedParent)
+        List<Vector2Int> exitCells, Transform generatedParent)
     {
         ClearGeneratedObjects(generatedParent);
         floorTiles.Clear();
@@ -55,7 +53,6 @@ public class MazeEnvironmentBuilder : MonoBehaviour
         wallHeightScale = configuredWallHeight;
         wallBaseOffset = configuredWallBaseOffset;
         floorThickness = configuredFloorThickness;
-        waterDepth = configuredWaterDepth;
 
         int torchEligibleSegments = 0;
         int torchCount = 0;
